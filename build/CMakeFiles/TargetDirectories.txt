@@ -1,3 +1,0 @@
-/home/samgb/Projects/muninn/build/CMakeFiles/muninn.dir
-/home/samgb/Projects/muninn/build/CMakeFiles/edit_cache.dir
-/home/samgb/Projects/muninn/build/CMakeFiles/rebuild_cache.dir

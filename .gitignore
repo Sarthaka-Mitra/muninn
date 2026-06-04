@@ -1,0 +1,87 @@
+# ==========================================
+# Build Artifacts & CMake Outputs
+# ==========================================
+build/
+bin/
+lib/
+[Bb]uild/
+[Dd]ebug/
+[Rr]elease/
+cmake-build-debug/
+cmake-build-release/
+CMakeFiles/
+CMakeCache.txt
+CMakeCXXCompilerId.cpp
+CMakeCCompilerId.c
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+
+# ==========================================
+# Compiled Binaries, Libraries & Objects
+# ==========================================
+*.o
+*.obj
+*.gch
+*.pch
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+
+# Project-specific executable (if built in-source)
+muninn
+
+# ==========================================
+# Database / Runtime Data
+# ==========================================
+# Ignore everything in the data directory except the directory itself (keep .gitkeep if present)
+/data/*
+!/data/.gitkeep
+
+# ==========================================
+# IDEs and Editors
+# ==========================================
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (CLion / Rider / IntelliJ)
+.idea/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.sln
+*.vcxproj
+*.vcxproj.user
+*.vcxproj.filters
+
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+*.xcworkspace/
+
+# ==========================================
+# OS Files
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
