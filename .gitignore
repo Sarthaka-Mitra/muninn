@@ -34,6 +34,7 @@ CTestTestfile.cmake
 *.exe
 *.out
 *.app
+handoff.md
 
 # Project-specific executable (if built in-source)
 muninn
