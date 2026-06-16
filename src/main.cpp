@@ -1,38 +1,34 @@
 #include <iostream>
 #include <vector>
-#include "table.h"
-#include "types.h"
+#include "database.h"
 #include "storage.h"
+#include "types.h"
 
 int main() {
-  std::vector<Column> schema = {
-  {"name", ColumnType::TEXT},
-  {"age", ColumnType::INT}
-  };
+    Database db;
 
-  Table studentsTable("students", schema);
+    // 1. Create the schema and tell the Database to create the table
+    std::vector<Column> schema = {
+        {"name", ColumnType::TEXT},
+        {"age", ColumnType::INT}
+    };
+    db.createTable("students", schema);
 
-  std::cout<<"Table created successfully: " << studentsTable.getName() << "\n";
+    // 2. Get the table from the Database
+    Table* studentsTable = db.getTable("students");
+    
+    if (studentsTable != nullptr) {
+        std::cout << "Successfully retrieved table: " << studentsTable->getName() << "\n";
 
-  Row validRow={"Arjun","21"};
-  bool success1=studentsTable.insertRow(validRow);
-  std::cout<<"Valid insert (should be 1): " << success1 << "\n";
+        // 3. Insert a row
+        Row validRow = {"Arjun", "21"};
+        studentsTable->insertRow(validRow);
 
-  Row invalidRow={"Priya","Twenty"};
-  bool success2=studentsTable.insertRow(invalidRow);
-  std::cout<<"Invalid insert (should be 0):" << success2 << "\n";
+        // 4. Ask the StorageEngine to save the table we got from the Database
+        StorageEngine::saveTable(*studentsTable);
+        std::cout << "Saved to disk via Database pointer.\n";
+    }
 
-  Row wrongSize={"Rahul"};
-  bool success3=studentsTable.insertRow(wrongSize);
-  std::cout<<"Invalid insert (should be 0):" << success3 << "\n";
-  
-  bool saved=StorageEngine::saveTable(studentsTable);
-  std::cout<<"Save successful:"<<saved<<"\n";
-
-  Table loadedTable("students", schema);
-  StorageEngine::loadTable(loadedTable);
-
-  std::cout << "Loaded name: " << loadedTable.getRows()[0][0] << "\n";
-
-  return 0;
+    return 0;
 }
+
