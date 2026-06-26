@@ -1,6 +1,7 @@
 #include "database.h"
 #include "table.h"
 #include <iostream>
+#include "storage.h"
 
 void Database::createTable(const std::string& name, const std::vector<Column>& schema) {
     // TODO: Create a new Table object using the name and schema.
@@ -8,6 +9,7 @@ void Database::createTable(const std::string& name, const std::vector<Column>& s
     // Hint: To insert into a C++ unordered_map, you can use the bracket syntax just like a Python dictionary!
     // Example: myMap[key] = value;
     Table newTable(name, schema);
+    StorageEngine::loadTable(newTable);
     tables_.emplace(name, newTable);
 }
 

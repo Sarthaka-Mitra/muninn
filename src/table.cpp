@@ -5,6 +5,7 @@
 #include "table.h"
 #include "btree.h"
 #include "types.h"
+#include "storage.h"
 
 Table::Table(std::string name, std::vector<Column> schema)
     : name_(name), schema_(schema) {
@@ -58,7 +59,8 @@ bool Table::insertRow(Row row){
     int colIdx=getColumnIndex(colName);
     index.insert(row[colIdx], rowIndex);
   }
-
+  
+  StorageEngine::saveTable(*this);
   return true;
 }
 
