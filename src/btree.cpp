@@ -1,4 +1,7 @@
 #include "btree.h"
+#include <cstddef>
+#include <string>
+#include <vector>
 
 BTreeNode::BTreeNode(int t, bool leaf)
   : t_(t), leaf_(leaf){}
@@ -10,7 +13,7 @@ void BTreeNode::insertNonFull(const std::string& key, int rowIndex) {
     if (leaf_) {
         // Step 1: Add a dummy slot at the end to make room
         keys_.push_back("");
-        rowIndexes_.push_back(0);
+        rowIndexes_.push_back({});
 
         // Step 2 & 3: Shift elements to the right until we find the right spot
         while (i >= 0 && keys_[i] > key) {
@@ -23,7 +26,7 @@ void BTreeNode::insertNonFull(const std::string& key, int rowIndex) {
 
         // Step 6: Drop the new values into the space we just created
         keys_[i + 1] = key;
-        rowIndexes_[i + 1] = rowIndex;
+        rowIndexes_[i + 1] = {rowIndex};
         
     } else {
         while (i>=0 && keys_[i]>key) {
@@ -66,7 +69,7 @@ void BTreeNode::splitChild(int i, BTreeNode* y) {
     
     // (We will finish the rest of this method in the next step)
     std::string midKey=y->keys_[t_-1];
-    int midRow=y->rowIndexes_[t_-1];
+  std::vector<int> midRow=y->rowIndexes_[t_-1];
     y->keys_.resize(t_-1);
     y->rowIndexes_.resize(t_-1);
     if (!y->leaf_) y->children_.resize(t_);
@@ -77,4 +80,100 @@ void BTreeNode::splitChild(int i, BTreeNode* y) {
     rowIndexes_.insert(rowIndexes_.begin()+i,midRow);
 }
 
+size_t BTreeNode::keyCount() const { return keys_.size(); }
+
+std::vector<int> BTreeNode::search(const std::string& key) {
+    int i = 0;
+    // 1. Loop to find the first key greater than or equal to 'key'
+    while (i < keys_.size() && key > keys_[i]) {
+        i++;
+    }
+
+    // 2. If the key matches keys_[i], return the rowIndex at keys_[i]
+    if (i < keys_.size() && keys_[i] == key) {
+        return rowIndexes_[i]; // Returns a vector containing the single rowIndex
+    }
+
+    // 3. If it's a leaf node, the key is not in the tree
+    if (leaf_) {
+        return {}; // Returns empty vector
+    }
+
+    // 4. Otherwise, recursively search the correct child
+    // TODO: Write the recursive call to search children_[i]
+    return children_[i]->search(key);
+}
+
+std::vector<int>* BTreeNode::searchRef(const std::string& key) {
+    int i = 0;
+    while (i < keys_.size() && key > keys_[i]) {
+        i++;
+    }
+    if (i < keys_.size() && keys_[i] == key) {
+        return &rowIndexes_[i];
+    }
+    if (leaf_) {
+        return nullptr;
+    }
+    return children_[i]->searchRef(key);
+}
+
+
+//--------------End of BTreeNode method implementation-------------//
+
+BTreeIndex::BTreeIndex(int t)
+  : root_(nullptr), t_(t){} //Constructor
+
+
+void BTreeIndex::insert(const std::string& key, int rowIndex) {
+    std::vector<int>* existing = searchRef(key);
+    if (existing != nullptr) {
+        existing->push_back(rowIndex);
+        return; // Done! No tree modifications needed.
+    }
+    // Case 1: Tree is empty
+    if (root_ == nullptr) {
+        // TODO: Create a new leaf BTreeNode and assign to root_
+        // TODO: Call insertNonFull on root_ with key and rowIndex
+        root_ = new BTreeNode(t_, true);
+        root_->insertNonFull(key, rowIndex);
+        
+    } else if (root_->keyCount() < 2*t_ - 1) {
+        // Case 2: Root exists and has space
+        // TODO: One line — delegate directly to root_
+        root_->insertNonFull(key, rowIndex);
+        
+    } else {
+        // Case 3: Root is full — tree must grow upward
+        BTreeNode* oldRoot = root_;
+        
+        // TODO: Create a brand new NON-LEAF node and assign it to root_
+        root_= new BTreeNode(t_, false);
+        // TODO: Make oldRoot the first child of the new root_
+        //       (Hint: root_->children_ is a vector of BTreeNode*)
+        root_->children_.push_back(oldRoot);
+        // TODO: Call splitChild(0, oldRoot) on root_
+        root_->splitChild(0, oldRoot);
+        // After the split, the new root has one key (the promoted middle key)
+        // Decide which child to insert into
+        int i = 0;
+        if (root_->keys_[0]< key) {
+        i=1;
+    }
+       // TODO: Call insertNonFull on children_[i] of root_
+      root_->children_[i]->insertNonFull(key, rowIndex);
+  }
+}
+
+std::vector<int>BTreeIndex::search(const std::string& key) {
+    if (root_==nullptr) {
+    return {};
+  }
+  return root_->search(key);
+}
+
+std::vector<int>* BTreeIndex::searchRef(const std::string& key) {
+    if (root_ == nullptr) return nullptr;
+    return root_->searchRef(key);
+}
 

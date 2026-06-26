@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "table.h"
+#include "btree.h"
 #include "types.h"
 
 Table::Table(std::string name, std::vector<Column> schema)
@@ -49,7 +50,60 @@ bool Table::insertRow(Row row){
   }
 
   rows_.push_back(row);
+  
+  int rowIndex=rows_.size()-1;
+  for (auto& pair: indexes_) {
+    const std::string& colName=pair.first;
+    BTreeIndex& index=pair.second;
+    int colIdx=getColumnIndex(colName);
+    index.insert(row[colIdx], rowIndex);
+  }
+
   return true;
+}
 
+int Table::getColumnIndex(const std::string& columnName) const{
+  for (size_t i=0; i<schema_.size(); i++) {
+    if (schema_[i].name == columnName) {
+      return i;
+    }
+  }
+  return -1;
+}
 
+bool Table::createIndex(const std::string& columnName) {
+  int index = getColumnIndex(columnName);
+  if (index==-1)
+    return false;
+  if (indexes_.find(columnName)!= indexes_.end())
+      return true;
+  indexes_.emplace(columnName, BTreeIndex(3));
+
+  for (size_t i=0;i<rows_.size();i++) {
+    indexes_[columnName].insert(rows_[i][index], i);
+  }
+  
+  return true;
+}
+
+std::vector<Row> Table::selectWhere(const std::string& columnName, const std::string& value) {
+  int colIdx=getColumnIndex(columnName);
+  if (colIdx==-1)
+    return {};
+
+  std::vector<Row> results;
+
+  auto it=indexes_.find(columnName);
+  if (it!=indexes_.end()){
+    std::vector<int> rowIndices = it->second.search(value);
+    for (int idx:rowIndices)
+      results.push_back(rows_[idx]);
+  } else {
+    for (const auto& r: rows_) {
+      if (r[colIdx]==value)
+        results.push_back(r);
+    }
+  }
+
+  return results;
 }
