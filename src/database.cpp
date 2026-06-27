@@ -2,6 +2,7 @@
 #include "table.h"
 #include <iostream>
 #include "storage.h"
+#include <utility>
 
 void Database::createTable(const std::string& name, const std::vector<Column>& schema) {
     // TODO: Create a new Table object using the name and schema.
@@ -10,7 +11,7 @@ void Database::createTable(const std::string& name, const std::vector<Column>& s
     // Example: myMap[key] = value;
     Table newTable(name, schema);
     StorageEngine::loadTable(newTable);
-    tables_.emplace(name, newTable);
+    tables_.emplace(name, std::move(newTable));
 }
 
 Table* Database::getTable(const std::string& name) {

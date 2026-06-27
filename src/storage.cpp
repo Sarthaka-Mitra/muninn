@@ -42,7 +42,7 @@ bool StorageEngine::loadTable(Table& table){
 
   while (inFile.peek() != EOF) {
     size_t size;
-    inFile.read(reinterpret_cast<char*>(&size), sizeof(size_t));
+    if (!inFile.read(reinterpret_cast<char*>(&size), sizeof(size_t))) break;
 
     std::string value(size, '\0');
     inFile.read(&value[0], size);
@@ -50,7 +50,7 @@ bool StorageEngine::loadTable(Table& table){
     currentRow.push_back(value);
 
     if (columnsPerRow==currentRow.size()){
-      table.insertRow(currentRow);
+      table.insertRow(currentRow, true);
       currentRow.clear();
     }
   }

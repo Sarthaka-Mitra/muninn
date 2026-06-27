@@ -25,7 +25,7 @@ std::vector<Column> Table::getSchema() const {
   return schema_;
 }
 
-bool Table::insertRow(Row row){
+bool Table::insertRow(Row row, bool isLoad){
   if (schema_.size()!=row.size())
     return false;
 
@@ -60,7 +60,9 @@ bool Table::insertRow(Row row){
     index.insert(row[colIdx], rowIndex);
   }
   
-  StorageEngine::saveTable(*this);
+  if (!isLoad) {
+    StorageEngine::saveTable(*this);
+  }
   return true;
 }
 

@@ -118,6 +118,14 @@ std::vector<int>* BTreeNode::searchRef(const std::string& key) {
     return children_[i]->searchRef(key);
 }
 
+BTreeNode::~BTreeNode() {
+  if (!leaf_) {
+    for (BTreeNode* child: children_) {
+      delete child;
+    }
+  }
+}
+
 
 //--------------End of BTreeNode method implementation-------------//
 
@@ -175,5 +183,26 @@ std::vector<int>BTreeIndex::search(const std::string& key) {
 std::vector<int>* BTreeIndex::searchRef(const std::string& key) {
     if (root_ == nullptr) return nullptr;
     return root_->searchRef(key);
+}
+
+BTreeIndex::~BTreeIndex() {
+  delete root_;
+}
+
+// Move constructor
+BTreeIndex::BTreeIndex(BTreeIndex&& other) noexcept 
+  : root_(other.root_), t_(other.t_) {
+    other.root_ = nullptr; // Nullify the old owner so it doesn't delete our root!
+}
+
+// Move assignment operator
+BTreeIndex& BTreeIndex::operator=(BTreeIndex&& other) noexcept {
+    if (this != &other) {
+        delete root_;        // Clean up our own existing root first
+        root_ = other.root_; // Take ownership of other's root
+        t_ = other.t_;
+        other.root_ = nullptr; // Nullify other
+    }
+    return *this;
 }
 

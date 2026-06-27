@@ -6,12 +6,14 @@
 int main() {
     Database db;
     std::cout << "====================================\n";
-    std::cout << "    Muninn Database Engine V1       \n";
+    std::cout << "    Muninn Database Engine V2       \n";
     std::cout << "====================================\n";
     std::cout << "Commands:\n";
     std::cout << "  CREATE <table_name> <col1> <type1> <col2> <type2>...\n";
     std::cout << "  INSERT <table_name> <val1> <val2>...\n";
     std::cout << "  SELECT <table_name>\n";
+    std::cout << "  SELECT <table_name> WHERE <column_name> <value>\n";
+    std::cout << "  CREATE INDEX <table_name> <column_name>\n";
     std::cout << "  EXIT\n\n";
 
     std::string line;

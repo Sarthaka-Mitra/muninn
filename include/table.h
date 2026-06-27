@@ -12,7 +12,7 @@ public:
   Table(std::string name, std::vector<Column> schema);
 
   //Insert a row
-  bool insertRow(Row row);
+  bool insertRow(Row row, bool isLoad = false);
 
   //Read operations
   std::vector<Row>    getRows() const;

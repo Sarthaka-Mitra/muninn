@@ -14,6 +14,8 @@ public:
     size_t keyCount() const;
     std::vector<int> search(const std::string& key);
 
+    ~BTreeNode();
+
 private:
     
     int t_; // Minimum degree
@@ -31,6 +33,13 @@ public:
     void insert(const std::string& key, int rowIndex);
     std::vector<int> search(const std::string& key);
     std::vector<int>* searchRef(const std::string& key);
+
+    ~BTreeIndex();
+    BTreeIndex(const BTreeIndex&)=delete;
+    BTreeIndex& operator=(const BTreeIndex&) = delete;
+
+    BTreeIndex(BTreeIndex&& other) noexcept;
+    BTreeIndex& operator=(BTreeIndex&& other) noexcept;
 private:
     BTreeNode* root_;
     int t_;
