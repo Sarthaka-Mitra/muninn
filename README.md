@@ -69,7 +69,7 @@ End of page:   Child page IDs (4 bytes each, uint32_t)
 
 ### 2. AST-Based Query Parser
 
-`SELECT ... WHERE` clauses are compiled into an Abstract Syntax Tree using a **recursive descent parser** that respects standard operator precedence:
+`SELECT ...  WHERE` clauses are compiled into an Abstract Syntax Tree using a **recursive descent parser** that respects standard operator precedence:
 
 ```
 Expression    → AndExpr ( "OR" AndExpr )*
