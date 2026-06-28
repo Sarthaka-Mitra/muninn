@@ -6,6 +6,7 @@
 #include "btree.h"
 #include "types.h"
 #include "storage.h"
+#include <filesystem>
 
 Table::Table(std::string name, std::vector<Column> schema)
     : name_(name), schema_(schema) {
@@ -81,12 +82,16 @@ bool Table::createIndex(const std::string& columnName) {
     return false;
   if (indexes_.find(columnName)!= indexes_.end())
       return true;
-  indexes_.emplace(columnName, BTreeIndex(3));
+  std::string indexPath = "../data/" + name_ + "_" + columnName + ".idx";
+  bool indexExists = std::filesystem::exists(indexPath);
+  indexes_.emplace(columnName, BTreeIndex(indexPath, 3));
 
-  for (size_t i=0;i<rows_.size();i++) {
-    indexes_[columnName].insert(rows_[i][index], i);
-  }
-  
+  if (!indexExists) {
+    auto it = indexes_.find(columnName);
+    for (size_t i = 0; i < rows_.size(); i++) {
+        it->second.insert(rows_[i][index], i);
+    }
+  }  
   return true;
 }
 

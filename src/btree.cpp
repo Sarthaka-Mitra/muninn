@@ -1,208 +1,295 @@
 #include "btree.h"
-#include <cstddef>
-#include <string>
-#include <vector>
+#include <cstring>
+#include <stdexcept>
+#include <iostream>
 
-BTreeNode::BTreeNode(int t, bool leaf)
-  : t_(t), leaf_(leaf){}
+const size_t MAX_KEY_SIZE = 32;
+const size_t HEADER_SIZE = 16;
+const size_t ENTRY_SIZE = MAX_KEY_SIZE + sizeof(int32_t); // 36 bytes
 
-void BTreeNode::insertNonFull(const std::string& key, int rowIndex) {
-    // Start i at the index of the last element
-    int i = keys_.size() - 1;
+// ===================== BTreeNode =====================
 
-    if (leaf_) {
-        // Step 1: Add a dummy slot at the end to make room
-        keys_.push_back("");
-        rowIndexes_.push_back({});
+BTreeNode::BTreeNode(int t, bool leaf, uint32_t pageId)
+    : t_(t), pageId_(pageId), leaf_(leaf) {}
 
-        // Step 2 & 3: Shift elements to the right until we find the right spot
-        while (i >= 0 && keys_[i] > key) {
-            // TODO: Move the key at index 'i' to index 'i + 1'
-            // TODO: Do the exact same thing for rowIndexes_ !
-            keys_[i+1]=keys_[i];
-            rowIndexes_[i+1]=rowIndexes_[i];
-            i--; // Move pointer left
+PageBuffer BTreeNode::serialize(const BTreeNode& node) {
+    PageBuffer buffer = {};
+
+    // Header
+    buffer[0] = node.leaf_ ? 1 : 0;
+    uint16_t numKeys = static_cast<uint16_t>(node.keys_.size());
+    std::memcpy(&buffer[1], &numKeys, sizeof(uint16_t));
+
+    // Key-Value entries
+    for (size_t i = 0; i < node.keys_.size(); i++) {
+        size_t offset = HEADER_SIZE + (i * ENTRY_SIZE);
+
+        // Write key (copy characters, rest is already zeroed)
+        size_t copyLen = std::min(node.keys_[i].length(), MAX_KEY_SIZE);
+        std::memcpy(&buffer[offset], node.keys_[i].c_str(), copyLen);
+
+        // Write rowIndex
+        int32_t rowIdx = static_cast<int32_t>(node.rowIndexes_[i]);
+        std::memcpy(&buffer[offset + MAX_KEY_SIZE], &rowIdx, sizeof(int32_t));
+    }
+
+    // Children (only for internal nodes)
+    if (!node.leaf_) {
+        // Use max keys to calculate offset so children always start at same spot
+        size_t childrenOffset = HEADER_SIZE + ((2 * node.t_ - 1) * ENTRY_SIZE);
+        for (size_t i = 0; i < node.children_.size(); i++) {
+            std::memcpy(&buffer[childrenOffset + (i * sizeof(uint32_t))],
+                        &node.children_[i], sizeof(uint32_t));
         }
+    }
 
-        // Step 6: Drop the new values into the space we just created
-        keys_[i + 1] = key;
-        rowIndexes_[i + 1] = {rowIndex};
-        
+    return buffer;
+}
+
+BTreeNode BTreeNode::deserialize(uint32_t pageId, const PageBuffer& buffer, int t) {
+    bool isLeaf = (buffer[0] == 1);
+    BTreeNode node(t, isLeaf, pageId);
+
+    uint16_t numKeys;
+    std::memcpy(&numKeys, &buffer[1], sizeof(uint16_t));
+
+    // Read Key-Value entries
+    for (uint16_t i = 0; i < numKeys; i++) {
+        size_t offset = HEADER_SIZE + (i * ENTRY_SIZE);
+
+        // Read key (stops at first null byte)
+        std::string key(reinterpret_cast<const char*>(&buffer[offset]));
+        node.keys_.push_back(key);
+
+        // Read rowIndex
+        int32_t rowIdx;
+        std::memcpy(&rowIdx, &buffer[offset + MAX_KEY_SIZE], sizeof(int32_t));
+        node.rowIndexes_.push_back(static_cast<int>(rowIdx));
+    }
+
+    // Read children (only for internal nodes)
+    if (!isLeaf) {
+        size_t childrenOffset = HEADER_SIZE + ((2 * t - 1) * ENTRY_SIZE);
+        for (uint16_t i = 0; i <= numKeys; i++) {
+            uint32_t childId;
+            std::memcpy(&childId, &buffer[childrenOffset + (i * sizeof(uint32_t))],
+                        sizeof(uint32_t));
+            node.children_.push_back(childId);
+        }
+    }
+
+    return node;
+}
+
+// ===================== BTreeIndex =====================
+
+BTreeIndex::BTreeIndex(const std::string& filepath, int t)
+    : pager_(filepath), rootPageId_(INVALID_PAGE_ID), t_(t) {
+    if (pager_.getPageCount() == 0) {
+        // Brand new index file — allocate page 0 as a metadata page
+        pager_.allocatePage();
+        // Write INVALID_PAGE_ID to metadata page (no root yet)
+        PageBuffer metaBuf = {};
+        std::memcpy(&metaBuf[0], &rootPageId_, sizeof(uint32_t));
+        pager_.writePage(0, metaBuf);
     } else {
-        while (i>=0 && keys_[i]>key) {
-        i--;
-        }
-      if (children_[i+1]->keys_.size()==2*t_-1){
-        splitChild(i+1, children_[i+1]);
-        if (keys_[i+1]<key){
-          i++;
-        }
-      }
-
-      
-
-      children_[i+1]->insertNonFull(key, rowIndex);
+        // Existing index file — read root page ID from metadata page (page 0)
+        PageBuffer metaBuf = pager_.readPage(0);
+        std::memcpy(&rootPageId_, &metaBuf[0], sizeof(uint32_t));
     }
-}
-
-void BTreeNode::splitChild(int i, BTreeNode* y) {
-    // 1. Create the new node Z. It has the same 'leaf' status as Y.
-    BTreeNode* z = new BTreeNode(y->t_, y->leaf_);
-    
-    // 2. Move the right half of Y's keys and rowIndexes into Z
-    // Y currently has (2t - 1) keys. We want to move the last (t - 1) keys into Z.
-    for (int j = 0; j < t_ - 1; j++) {
-        // TODO: push_back the correct key from 'y' into 'z'
-        // Hint: The index in 'y' starts at j + t_
-        z->keys_.push_back(y->keys_[j+t_]);
-        z->rowIndexes_.push_back(y->rowIndexes_[j+t_]);
-        // TODO: do the same for rowIndexes_
-    }
-    
-    // 3. If Y is not a leaf, we also have to move the right half of its children pointers!
-    if (!y->leaf_) {
-        for (int j = 0; j < t_; j++) {
-            // TODO: push_back the correct child pointer from 'y->children_' into 'z->children_'
-            z->children_.push_back(y->children_[j+t_]);
-        }
-    }
-    
-    // (We will finish the rest of this method in the next step)
-    std::string midKey=y->keys_[t_-1];
-  std::vector<int> midRow=y->rowIndexes_[t_-1];
-    y->keys_.resize(t_-1);
-    y->rowIndexes_.resize(t_-1);
-    if (!y->leaf_) y->children_.resize(t_);
-    
-    children_.insert(children_.begin()+i+1,z);
-
-    keys_.insert(keys_.begin()+i,midKey);
-    rowIndexes_.insert(rowIndexes_.begin()+i,midRow);
-}
-
-size_t BTreeNode::keyCount() const { return keys_.size(); }
-
-std::vector<int> BTreeNode::search(const std::string& key) {
-    int i = 0;
-    // 1. Loop to find the first key greater than or equal to 'key'
-    while (i < keys_.size() && key > keys_[i]) {
-        i++;
-    }
-
-    // 2. If the key matches keys_[i], return the rowIndex at keys_[i]
-    if (i < keys_.size() && keys_[i] == key) {
-        return rowIndexes_[i]; // Returns a vector containing the single rowIndex
-    }
-
-    // 3. If it's a leaf node, the key is not in the tree
-    if (leaf_) {
-        return {}; // Returns empty vector
-    }
-
-    // 4. Otherwise, recursively search the correct child
-    // TODO: Write the recursive call to search children_[i]
-    return children_[i]->search(key);
-}
-
-std::vector<int>* BTreeNode::searchRef(const std::string& key) {
-    int i = 0;
-    while (i < keys_.size() && key > keys_[i]) {
-        i++;
-    }
-    if (i < keys_.size() && keys_[i] == key) {
-        return &rowIndexes_[i];
-    }
-    if (leaf_) {
-        return nullptr;
-    }
-    return children_[i]->searchRef(key);
-}
-
-BTreeNode::~BTreeNode() {
-  if (!leaf_) {
-    for (BTreeNode* child: children_) {
-      delete child;
-    }
-  }
-}
-
-
-//--------------End of BTreeNode method implementation-------------//
-
-BTreeIndex::BTreeIndex(int t)
-  : root_(nullptr), t_(t){} //Constructor
-
-
-void BTreeIndex::insert(const std::string& key, int rowIndex) {
-    std::vector<int>* existing = searchRef(key);
-    if (existing != nullptr) {
-        existing->push_back(rowIndex);
-        return; // Done! No tree modifications needed.
-    }
-    // Case 1: Tree is empty
-    if (root_ == nullptr) {
-        // TODO: Create a new leaf BTreeNode and assign to root_
-        // TODO: Call insertNonFull on root_ with key and rowIndex
-        root_ = new BTreeNode(t_, true);
-        root_->insertNonFull(key, rowIndex);
-        
-    } else if (root_->keyCount() < 2*t_ - 1) {
-        // Case 2: Root exists and has space
-        // TODO: One line — delegate directly to root_
-        root_->insertNonFull(key, rowIndex);
-        
-    } else {
-        // Case 3: Root is full — tree must grow upward
-        BTreeNode* oldRoot = root_;
-        
-        // TODO: Create a brand new NON-LEAF node and assign it to root_
-        root_= new BTreeNode(t_, false);
-        // TODO: Make oldRoot the first child of the new root_
-        //       (Hint: root_->children_ is a vector of BTreeNode*)
-        root_->children_.push_back(oldRoot);
-        // TODO: Call splitChild(0, oldRoot) on root_
-        root_->splitChild(0, oldRoot);
-        // After the split, the new root has one key (the promoted middle key)
-        // Decide which child to insert into
-        int i = 0;
-        if (root_->keys_[0]< key) {
-        i=1;
-    }
-       // TODO: Call insertNonFull on children_[i] of root_
-      root_->children_[i]->insertNonFull(key, rowIndex);
-  }
-}
-
-std::vector<int>BTreeIndex::search(const std::string& key) {
-    if (root_==nullptr) {
-    return {};
-  }
-  return root_->search(key);
-}
-
-std::vector<int>* BTreeIndex::searchRef(const std::string& key) {
-    if (root_ == nullptr) return nullptr;
-    return root_->searchRef(key);
 }
 
 BTreeIndex::~BTreeIndex() {
-  delete root_;
+    // Pager destructor handles file closing automatically
 }
 
-// Move constructor
-BTreeIndex::BTreeIndex(BTreeIndex&& other) noexcept 
-  : root_(other.root_), t_(other.t_) {
-    other.root_ = nullptr; // Nullify the old owner so it doesn't delete our root!
+BTreeIndex::BTreeIndex(BTreeIndex&& other) noexcept
+    : pager_(std::move(other.pager_)),
+      rootPageId_(other.rootPageId_),
+      t_(other.t_) {
+    other.rootPageId_ = INVALID_PAGE_ID;
 }
 
-// Move assignment operator
 BTreeIndex& BTreeIndex::operator=(BTreeIndex&& other) noexcept {
     if (this != &other) {
-        delete root_;        // Clean up our own existing root first
-        root_ = other.root_; // Take ownership of other's root
+        pager_ = std::move(other.pager_);
+        rootPageId_ = other.rootPageId_;
         t_ = other.t_;
-        other.root_ = nullptr; // Nullify other
+        other.rootPageId_ = INVALID_PAGE_ID;
     }
     return *this;
 }
 
+BTreeNode BTreeIndex::loadNode(uint32_t pageId) {
+    PageBuffer buffer = pager_.readPage(pageId);
+    return BTreeNode::deserialize(pageId, buffer, t_);
+}
+
+void BTreeIndex::saveNode(uint32_t pageId, const BTreeNode& node) {
+    PageBuffer buffer = BTreeNode::serialize(node);
+    pager_.writePage(pageId, buffer);
+}
+
+// ===================== Insert Logic =====================
+
+void BTreeIndex::insert(const std::string& key, int rowIndex) {
+    if (rootPageId_ == INVALID_PAGE_ID) {
+        // Tree is empty — create the first leaf node
+        uint32_t newPageId = pager_.allocatePage();
+        BTreeNode root(t_, true, newPageId);
+        root.keys_.push_back(key);
+        root.rowIndexes_.push_back(rowIndex);
+        saveNode(newPageId, root);
+
+        // Update metadata page with new root
+        rootPageId_ = newPageId;
+        PageBuffer metaBuf = {};
+        std::memcpy(&metaBuf[0], &rootPageId_, sizeof(uint32_t));
+        pager_.writePage(0, metaBuf);
+        return;
+    }
+
+    BTreeNode root = loadNode(rootPageId_);
+
+    if ((int)root.keys_.size() == 2 * t_ - 1) {
+        // Root is full — create a new root and split the old one
+        uint32_t newRootPageId = pager_.allocatePage();
+        BTreeNode newRoot(t_, false, newRootPageId);
+        newRoot.children_.push_back(rootPageId_);
+        saveNode(newRootPageId, newRoot);
+
+        splitChild(newRootPageId, 0, rootPageId_);
+
+        // Update metadata page with new root
+        rootPageId_ = newRootPageId;
+        PageBuffer metaBuf = {};
+        std::memcpy(&metaBuf[0], &rootPageId_, sizeof(uint32_t));
+        pager_.writePage(0, metaBuf);
+
+        insertNonFull(rootPageId_, key, rowIndex);
+    } else {
+        insertNonFull(rootPageId_, key, rowIndex);
+    }
+}
+
+void BTreeIndex::insertNonFull(uint32_t pageId, const std::string& key, int rowIndex) {
+    BTreeNode node = loadNode(pageId);
+    int i = (int)node.keys_.size() - 1;
+
+    if (node.leaf_) {
+        // Shift keys right to make room (same logic as your V2 code)
+        node.keys_.push_back("");
+        node.rowIndexes_.push_back(0);
+        while (i >= 0 && key < node.keys_[i]) {
+            node.keys_[i + 1] = node.keys_[i];
+            node.rowIndexes_[i + 1] = node.rowIndexes_[i];
+            i--;
+        }
+        node.keys_[i + 1] = key;
+        node.rowIndexes_[i + 1] = rowIndex;
+        saveNode(pageId, node);
+    } else {
+        // Find which child to descend into
+        while (i >= 0 && key < node.keys_[i]) {
+            i--;
+        }
+        i++;
+
+        // Check if that child is full
+        BTreeNode child = loadNode(node.children_[i]);
+        if ((int)child.keys_.size() == 2 * t_ - 1) {
+            splitChild(pageId, i, node.children_[i]);
+
+            // Reload parent after split modified it
+            node = loadNode(pageId);
+            if (key > node.keys_[i]) {
+                i++;
+            }
+        }
+        insertNonFull(node.children_[i], key, rowIndex);
+    }
+}
+
+void BTreeIndex::splitChild(uint32_t parentPageId, int i, uint32_t childPageId) {
+    BTreeNode parent = loadNode(parentPageId);
+    BTreeNode y = loadNode(childPageId);
+
+    // Create new sibling node z
+    uint32_t zPageId = pager_.allocatePage();
+    BTreeNode z(t_, y.leaf_, zPageId);
+
+    // Save the middle key BEFORE any resizing
+    std::string midKey = y.keys_[t_ - 1];
+    int midRowIdx = y.rowIndexes_[t_ - 1];
+
+    // Copy upper half of y's keys into z
+    for (int j = 0; j < t_ - 1; j++) {
+        z.keys_.push_back(y.keys_[t_ + j]);
+        z.rowIndexes_.push_back(y.rowIndexes_[t_ + j]);
+    }
+
+    // Copy upper half of y's children into z (if internal node)
+    if (!y.leaf_) {
+        for (int j = 0; j < t_; j++) {
+            z.children_.push_back(y.children_[t_ + j]);
+        }
+    }
+
+    // Truncate y to keep only the lower half
+    y.keys_.resize(t_ - 1);
+    y.rowIndexes_.resize(t_ - 1);
+    if (!y.leaf_) {
+        y.children_.resize(t_);
+    }
+
+    // Insert z as a new child of parent, and promote midKey
+    parent.children_.insert(parent.children_.begin() + i + 1, zPageId);
+    parent.keys_.insert(parent.keys_.begin() + i, midKey);
+    parent.rowIndexes_.insert(parent.rowIndexes_.begin() + i, midRowIdx);
+
+    // Save all three modified nodes back to disk
+    saveNode(childPageId, y);
+    saveNode(zPageId, z);
+    saveNode(parentPageId, parent);
+}
+
+// ===================== Search Logic =====================
+
+std::vector<int> BTreeIndex::search(const std::string& key) {
+    std::vector<int> results;
+    if (rootPageId_ == INVALID_PAGE_ID) return results;
+    searchNode(rootPageId_, key, results);
+    return results;
+}
+
+void BTreeIndex::searchNode(uint32_t pageId, const std::string& key, std::vector<int>& results) {
+    BTreeNode node = loadNode(pageId);
+
+    int i = 0;
+    while (i < (int)node.keys_.size()) {
+        if (key < node.keys_[i]) {
+            // Key is smaller — search the left child, then stop
+            if (!node.leaf_) {
+                searchNode(node.children_[i], key, results);
+            }
+            return;
+        } else if (key == node.keys_[i]) {
+            // Check left child for more duplicates first
+            if (!node.leaf_) {
+                searchNode(node.children_[i], key, results);
+            }
+            // Collect this match
+            results.push_back(node.rowIndexes_[i]);
+            i++;
+            // Continue scanning for more duplicates in this node
+        } else {
+            // key > keys_[i], move to the next key
+            i++;
+        }
+    }
+
+    // After all keys, check the rightmost child
+    if (!node.leaf_) {
+        searchNode(node.children_[i], key, results);
+    }
+}
