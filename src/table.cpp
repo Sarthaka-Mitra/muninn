@@ -116,3 +116,95 @@ std::vector<Row> Table::selectWhere(const std::string& columnName, const std::st
 
   return results;
 }
+
+namespace {
+
+bool evaluateExpr(Expr* expr, const Row& row, const Table& table) {
+  if (!expr) return true;
+  if (expr->op == Op::AND) {
+    return evaluateExpr(expr->left, row, table) && evaluateExpr(expr->right, row, table);
+  }
+  if (expr->op == Op::OR) {
+    return evaluateExpr(expr->left, row, table) || evaluateExpr(expr->right, row, table);
+  }
+
+  int colIdx = table.getColumnIndex(expr->colName);
+  if (colIdx == -1) return false;
+  const std::string& cellValue = row[colIdx];
+  const std::string& queryValue = expr->value;
+
+  ColumnType colType = table.getSchema()[colIdx].type;
+
+  if (colType == ColumnType::INT) {
+    try {
+      int cellInt = std::stoi(cellValue);
+      int queryInt = std::stoi(queryValue);
+      switch (expr->op) {
+        case Op::EQUAL: return cellInt == queryInt;
+        case Op::NOT_EQUAL: return cellInt != queryInt;
+        case Op::GREATER: return cellInt > queryInt;
+        case Op::GREATER_EQUAL: return cellInt >= queryInt;
+        case Op::LESS: return cellInt < queryInt;
+        case Op::LESS_EQUAL: return cellInt <= queryInt;
+        default: return false;
+      }
+    } catch (...) {
+      return false;
+    }
+  } else {
+    switch (expr->op) {
+      case Op::EQUAL: return cellValue == queryValue;
+      case Op::NOT_EQUAL: return cellValue != queryValue;
+      case Op::GREATER: return cellValue > queryValue;
+      case Op::GREATER_EQUAL: return cellValue >= queryValue;
+      case Op::LESS: return cellValue < queryValue;
+      case Op::LESS_EQUAL: return cellValue <= queryValue;
+      default: return false;
+    }
+  }
+}
+
+bool findIndexFilter(Expr* expr, const Table& table, std::string& outCol, std::string& outVal) {
+  if (!expr) return false;
+  if (expr->op == Op::EQUAL) {
+    if (table.hasIndex(expr->colName)) {
+      outCol = expr->colName;
+      outVal = expr->value;
+      return true;
+    }
+  }
+  if (expr->op == Op::AND) {
+    if (findIndexFilter(expr->left, table, outCol, outVal)) return true;
+    if (findIndexFilter(expr->right, table, outCol, outVal)) return true;
+  }
+  return false;
+}
+
+} // namespace
+
+bool Table::hasIndex(const std::string& columnName) const {
+  return indexes_.find(columnName) != indexes_.end();
+}
+
+std::vector<Row> Table::selectWhere(Expr* expr) {
+  std::vector<Row> results;
+  std::string indexCol, indexVal;
+  
+  if (findIndexFilter(expr, *this, indexCol, indexVal)) {
+    auto it = indexes_.find(indexCol);
+    std::vector<int> candidateIndices = it->second.search(indexVal);
+    for (int idx : candidateIndices) {
+      if (evaluateExpr(expr, rows_[idx], *this)) {
+        results.push_back(rows_[idx]);
+      }
+    }
+  } else {
+    for (const auto& row : rows_) {
+      if (evaluateExpr(expr, row, *this)) {
+        results.push_back(row);
+      }
+    }
+  }
+  return results;
+}
+

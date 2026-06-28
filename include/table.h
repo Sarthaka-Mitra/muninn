@@ -21,6 +21,9 @@ public:
   
   bool createIndex(const std::string& columnName);
   std::vector<Row> selectWhere(const std::string& columnName, const std::string& value);
+  std::vector<Row> selectWhere(Expr* expr);
+  bool hasIndex(const std::string& columnName) const;
+  int getColumnIndex(const std::string& columnName) const;
 private:
   std::string         name_;
   std::vector<Column> schema_;
@@ -28,5 +31,4 @@ private:
   std::unordered_map<std::string, BTreeIndex> indexes_;
 
   //Operations
-  int getColumnIndex(const std::string& columnName) const;
 };
